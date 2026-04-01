@@ -1,0 +1,13 @@
+let
+    Source = cdesk_fnGetAllPages("customer"),
+    #"Converted to Table" = Table.FromList(Source, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #"Expanded Column1" = Table.ExpandRecordColumn(#"Converted to Table", "Column1", {"id", "company_num", "name", "alias", "customer", "status", "email_general", "phone_general", "mobile_general", "street", "city", "zip", "country", "ico", "dic", "icdph", "properties", "customer-category", "customer-type"}, {"id", "company_num", "name", "alias", "customer", "status", "email_general", "phone_general", "mobile_general", "street", "city", "zip", "country", "ico", "dic", "icdph", "properties", "customer-category", "customer-type"}),
+    #"Filtered Rows" = Table.SelectRows(#"Expanded Column1", each ([id] = 651)),
+    #"Expanded properties" = Table.ExpandListColumn(#"Filtered Rows", "properties"),
+    #"Expanded properties1" = Table.ExpandRecordColumn(#"Expanded properties", "properties", {"name", "values"}, {"properties.name", "properties.values"}),
+    #"Expanded properties.values" = Table.ExpandListColumn(#"Expanded properties1", "properties.values"),
+    #"Expanded properties.values1" = Table.ExpandRecordColumn(#"Expanded properties.values", "properties.values", {"baseproperties"}, {"properties.values.baseproperties"}),
+    #"Expanded properties.values.baseproperties" = Table.ExpandListColumn(#"Expanded properties.values1", "properties.values.baseproperties"),
+    #"Expanded properties.values.baseproperties1" = Table.ExpandRecordColumn(#"Expanded properties.values.baseproperties", "properties.values.baseproperties", {"value"}, {"properties.values.baseproperties.value"})
+in
+    #"Expanded properties.values.baseproperties1"
