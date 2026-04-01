@@ -1,1 +1,44 @@
-asd
+let
+    GetAllPages = (Endpoint as text) =>
+    let
+        // Step 1: Define a helper function to fetch a single page
+        GetPage = (PageNum as number) =>
+        let
+            // Build the paginated URL using pp:1000 to safely stay under the 2000 hard limit
+            PaginatedEndpoint = Endpoint & "/pg:" & Number.ToText(PageNum) & "/pp:1000",
+            Url = CDESK_BaseUrl & PaginatedEndpoint,
+            
+            // Reference the cached token from our CDESK_Token query
+            AuthHeader = "apitoken " & CDESK_token, 
+            
+            // Make the GET request
+            Source = Web.Contents(Url, [
+                Headers = [
+                    #"Authorization" = AuthHeader,
+                    #"Accept" = "application/json"
+                ],
+                ManualStatusHandling = {400, 401, 403, 404, 500}
+            ]),
+            
+            // Parse the JSON
+            JsonResponse = try Json.Document(Source) otherwise null,
+            
+            // Extract the "data" list. If it's missing or empty, return an empty list {}.
+            DataList = if JsonResponse <> null and Record.HasFields(JsonResponse, "data") then JsonResponse[data] else {}
+        in
+            DataList,
+
+        // Step 2: Loop through pages until the API returns 0 records
+        GeneratedList = List.Generate(
+            () => [Page = 1, Data = GetPage(1)],                           // Initial state (Page 1)
+            each List.Count([Data]) > 0,                                   // Stop condition: keep going if data is returned
+            each [Page = [Page] + 1, Data = GetPage([Page] + 1)],          // Next state: Increment Page
+            each [Data]                                                    // Extract just the data list from the record
+        ),
+
+        // Step 3: Combine all the pages into one full list
+        CombinedList = List.Combine(GeneratedList)
+    in
+        CombinedList
+in
+    GetAllPages
