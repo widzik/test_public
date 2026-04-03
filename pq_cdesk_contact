@@ -1,1 +1,30 @@
-
+let
+    Source = cdesk_fnGetAllPages("contact"),
+    #"Converted to Table" = Table.FromList(Source, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+        #"Expanded Column1" = Table.ExpandRecordColumn(#"Converted to Table", "Column1", 
+        {
+            "id", "name", "first_name", "middle_name", "last_name", "title_prefix", "title_suffix", 
+            "contact_email", "contact_phone", "contact_mobil", "company_name", "values", 
+            "email_req_copy", "email_offer", "email_chat_copy", "email_cm_copy", "email_reminder", 
+            "email_invoice", "email_fill", "customer-category", "customer-type", "customer-categorization"
+        }, 
+        {
+            "id", "name", "first_name", "middle_name", "last_name", "title_prefix", "title_suffix", 
+            "contact_email", "contact_phone", "contact_mobil", "company_name", "values", 
+            "email_req_copy", "email_offer", "email_chat_copy", "email_cm_copy", "email_reminder", 
+            "email_invoice", "email_fill", "customer-category", "customer-type", "customer-categorization"
+        }),
+    #"Extract Company Contact ID" = Table.AddColumn(#"Expanded Column1", "id_company_contact", each 
+        if [values] is list then 
+            let
+                IDs = List.Transform([values], each Text.From(_[id_company_contact]?)),
+                Cleaned = List.RemoveItems(IDs, {null, ""}),
+                Result = Text.Combine(Cleaned, ", ")
+            in
+                Result
+        else 
+            null
+    ),
+    #"Removed Original List" = Table.RemoveColumns(#"Extract Company Contact ID", {"values"})
+in
+    #"Removed Original List"
