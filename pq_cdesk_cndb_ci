@@ -1,12 +1,55 @@
 let
     Source = cdesk_fnGetAllPages("cmdb/ci"),
     #"Converted to Table" = Table.FromList(Source, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-    #"Expanded Column1" = Table.ExpandRecordColumn(#"Converted to Table", "Column1",  {"id", "name", "cm_name", "description", "ci_type_name", "company_id", "archived_at", "company_name", "maingroup_name", "owner_name", "created_at", "updated_at", "category_code", "properties", "thumbnail", "key_user_names", "key_user_ids", "assigned_cat_area", "branch_responsible_person_ids"}, {"id", "name", "cm_name", "description", "ci_type_name", "company_id", "archived_at", "company_name", "maingroup_name", "owner_name", "created_at", "updated_at", "category_code", "properties", "thumbnail", "key_user_names", "key_user_ids", "assigned_cat_area", "branch_responsible_person_ids"}),
-    #"Expanded properties" = Table.ExpandListColumn(#"Expanded Column1", "properties"),
-    #"Expanded properties1" = Table.ExpandRecordColumn(#"Expanded properties", "properties", {"name", "values"}, {"properties.name", "properties.values"}),
-    #"Expanded properties.values" = Table.ExpandListColumn(#"Expanded properties1", "properties.values"),
-    #"Expanded properties.values1" = Table.ExpandRecordColumn(#"Expanded properties.values", "properties.values", {"baseproperties"}, {"properties.values.baseproperties"}),
-    #"Expanded properties.values.baseproperties" = Table.ExpandListColumn(#"Expanded properties.values1", "properties.values.baseproperties"),
-    #"Expanded properties.values.baseproperties1" = Table.ExpandRecordColumn(#"Expanded properties.values.baseproperties", "properties.values.baseproperties", {"value"}, {"properties.values.baseproperties.value"})
+    #"Expanded Column1" = Table.ExpandRecordColumn(#"Converted to Table", "Column1", {"id", "name", "cm_name", "description", "ci_type_name", "company_id", "archived_at", "company_name", "maingroup_name", "owner_name", "created_at", "updated_at", "category_code", "properties"}, {"id", "name", "cm_name", "description", "ci_type_name", "company_id", "archived_at", "company_name", "maingroup_name", "owner_name", "created_at", "updated_at", "category_code", "properties"}),
+    #"Parsed Fields" = Table.AddColumn(#"Expanded Column1", "Fields", each 
+        if [properties] is list then 
+            let
+                CleanList = List.Transform([properties], (p) => 
+                    let 
+                        Raw = p[values]?{0}?[baseproperties]?{0}?[value]?
+                    in
+                        [
+                            Name = p[name], 
+                            Value = if Raw is list then Text.Combine(List.Transform(Raw, each Text.From(_)), ", ") 
+                                    else if Raw = null then "" 
+                                    else Text.From(Raw)
+                        ]
+                ),
+                AsRecord = Record.FromList(
+                    List.Transform(CleanList, each _[Value]), 
+                    List.Transform(CleanList, each _[Name])
+                )
+            in
+                AsRecord
+        else 
+            null
+    ),
+    #"Expanded Fields" = Table.ExpandRecordColumn(#"Parsed Fields", "Fields", 
+        {
+            "Externé ID", "EČV", "Typové označenie", "VIN vozidla", "Tel. číslo zariadenia", 
+            "Dátové číslo zariadenia", "Dátum montáže", "EMEI", "Fakturácia", "Roaming", 
+            "Montoval", "Typ MJ", "Parametre MJ", "Dátum demontáže", "Dátum servisu", 
+            "Poznámka 1", "Zmluva"
+        }),
+    #"Removed Original List" = Table.RemoveColumns(#"Expanded Fields", {"properties"}),
+    ColumnsToUTC1 = {
+        "created_at", 
+        "updated_at"},
+    UTC1Converter = (dt) => 
+        if dt = null then null 
+        else DateTimeZone.RemoveZone(
+                DateTimeZone.SwitchZone(DateTimeZone.From(dt), 1)
+             ),
+
+    #"ConvertedUTC+1" = Table.TransformColumns(
+        #"Expanded Fields", 
+        List.Transform(ColumnsToUTC1, (col) => {col, UTC1Converter})
+    ),
+
+    #"TypeDateTime" = Table.TransformColumnTypes(
+        #"ConvertedUTC+1", 
+        List.Transform(ColumnsToUTC1, (col) => {col, type datetime})
+    )
 in
-    #"Expanded properties.values.baseproperties1"
+    #"TypeDateTime"
