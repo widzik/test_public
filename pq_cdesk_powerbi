@@ -1,0 +1,77 @@
+let
+    GetReportPage = (PageNum as number) =>
+        let
+            Source = Web.Contents(CDESK_BaseUrl & "powerbi/report", [
+                Headers = [#"Authorization" = "apitoken " & CDESK_token, #"Accept" = "application/json"],
+                Query = [
+                    type = "request",
+                    months = "24",
+                    format = "json",
+                    expand = "true",
+                    flags = "A",
+                    pp = "1000", 
+                    pg = Text.From(PageNum)
+                ],
+                Timeout = #duration(0, 0, 10, 0)
+            ]),
+            Json = Json.Document(Source),
+            Data = if Json <> null and Record.HasFields(Json, "data") then Json[data][requests]? else null
+        in
+            Data,
+    PagesList = List.Generate(
+        () => [Page = 1, Data = GetReportPage(1)],
+        each [Data] <> null and List.Count([Data]) > 0,
+        each [Page = [Page] + 1, Data = GetReportPage([Page] + 1)],
+        each [Data]
+    ),
+    CombinedList = List.Combine(PagesList),
+    #"Converted to Table" = Table.FromRecords(CombinedList, 
+        {
+            "id_req", "company_id", "catalog_id", "req_accepted_note", "req_acceptedby_name", 
+            "req_close_date", "req_accepted_date", "req_due_date", "idatetime", "assign_date", 
+            "reaction_datetime", "reaction_due_date", "creator", "req_status", "title", 
+            "solver", "company_name", "status", "properties"
+        }, 
+        MissingField.UseNull),
+    #"Added Deep Attributes" = Table.AddColumn(#"Converted to Table", "DeepAttributes", each 
+        let 
+            p1 = List.First([properties] ?? {}),
+            v1 = if p1 <> null then List.First(p1[values] ?? {}) else null,
+            bp1 = if v1 <> null then List.First(v1[baseproperties] ?? {}) else null
+        in 
+            if bp1 <> null then 
+                [
+                    name = bp1[name]?, 
+                    description = bp1[description]?, 
+                    value = if bp1[value]? is list then Text.Combine(List.Transform(bp1[value]?, each Text.From(_)), ", ") 
+                            else Text.From(bp1[value]?)
+                ] 
+            else null),
+    #"Expanded DeepAttributes" = Table.ExpandRecordColumn(#"Added Deep Attributes", "DeepAttributes", {"name", "description", "value"}),
+    #"Removed Original List" = Table.RemoveColumns(#"Expanded DeepAttributes", {"properties"}),
+    ColumnsToUTC1 = {
+        "req_close_date", 
+        "req_accepted_date", 
+        "req_due_date", 
+        "idatetime",
+        "assign_date", 
+        "reaction_datetime",
+        "reaction_due_date"
+    },
+    UTC1Converter = (dt) => 
+        if dt = null then null 
+        else DateTimeZone.RemoveZone(
+                DateTimeZone.SwitchZone(DateTimeZone.From(dt), 1)
+             ),
+
+    #"ConvertedUTC+1" = Table.TransformColumns(
+        #"Expanded DeepAttributes", 
+        List.Transform(ColumnsToUTC1, (col) => {col, UTC1Converter})
+    ),
+
+    #"TypeDateTime" = Table.TransformColumnTypes(
+        #"ConvertedUTC+1", 
+        List.Transform(ColumnsToUTC1, (col) => {col, type datetime})
+    )
+in
+    #"TypeDateTime"
